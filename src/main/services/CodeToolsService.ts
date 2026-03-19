@@ -766,11 +766,16 @@ class CodeToolsService {
       const bunInstallPath = path.join(os.homedir(), HOME_CHERRY_DIR)
       const registryUrl = await this.getNpmRegistryUrl()
 
+      // Get logs directory for update output redirection
+      const logsDir = loggerService.getLogsDir()
+      const updateLogPath = path.join(logsDir, 'cli-tools-update.log').replace(/\\/g, '/')
+
       const installEnvPrefix = isWin
         ? `set "BUN_INSTALL=${bunInstallPath}" && set "NPM_CONFIG_REGISTRY=${registryUrl}" &&`
         : `export BUN_INSTALL="${bunInstallPath}" && export NPM_CONFIG_REGISTRY="${registryUrl}" &&`
 
-      const updateCommand = `${installEnvPrefix} "${bunPath}" install -g ${packageName}`
+      // Use > to truncate log file on each update
+      const updateCommand = `${installEnvPrefix} "${bunPath}" install -g ${packageName} > "${updateLogPath}" 2>&1`
       logger.info(`Executing update command: ${updateCommand}`)
 
       await execAsync(updateCommand, { timeout: 60000 })
@@ -836,7 +841,7 @@ class CodeToolsService {
     const isInstalled = await this.isPackageInstalled(cliTool)
 
     // Check for updates and auto-update if requested
-    let updateMessage = ''
+    const updateMessage = ''
     let installedVersion: string | null = null
 
     // Get installed version if package is installed (needed for qwen-code auth-type check)
@@ -851,18 +856,12 @@ class CodeToolsService {
           if (versionInfo.needsUpdate) {
             logger.info(`Update available for ${cliTool}: ${versionInfo.installed} -> ${versionInfo.latest}`)
             logger.info(`Auto-updating ${cliTool} to latest version`)
-            updateMessage = ` && echo "Updating ${cliTool} from ${versionInfo.installed} to ${versionInfo.latest}..."`
             const updateResult = await this.updatePackage(cliTool)
             if (updateResult.success) {
               logger.info(`Update completed successfully for ${cliTool}`)
-              updateMessage += ` && echo "Update completed successfully"`
             } else {
               logger.error(`Update failed for ${cliTool}: ${updateResult.message}`)
-              updateMessage += ` && echo "Update failed: ${updateResult.message}"`
             }
-          } else if (versionInfo.installed && versionInfo.latest) {
-            logger.info(`${cliTool} is already up to date (${versionInfo.installed})`)
-            updateMessage = ` && echo "${cliTool} is up to date (${versionInfo.installed})"`
           }
         }
       } catch (error) {
